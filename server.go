@@ -5,6 +5,10 @@ import (
 	pb "kvstore/kv/kvs"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"runtime"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -48,6 +52,17 @@ func main() {
 	s := grpc.NewServer()
 	kvServer := &server{store: make(map[string]string)}
 	pb.RegisterKeyValueStoreServer(s, kvServer)
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
+	log.SetOutput(os.Stdout)
+	runtime.GOMAXPROCS(1)
+	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(1)
+	go func() {
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatal(err)
+		}
+		os.Exit(0)
+	}()
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
