@@ -23,5 +23,5 @@ message DeleteRequest{
   string key = 1;
 }
 message DeleteResponse{
-  bool success = 1;  
+  bool success = 1;
 }
