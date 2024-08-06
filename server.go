@@ -1,4 +1,4 @@
-package main//mutex
+package main //channel
 
 import (
 	"context"
@@ -9,28 +9,27 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"runtime"
-	"sync"
 
 	"google.golang.org/grpc"
 )
 
 type server struct {
 	pb.UnimplementedKeyValueStoreServer
-	store map[string]string
-	mu    sync.Mutex
+	store    map[string]string
+	chanLock chan int
 }
 
 func (s *server) Set(ctx context.Context, in *pb.SetRequest) (*pb.SetResponse, error) {
-	s.mu.Lock()
+	s.chanLock <- 1
 	s.store[in.Key] = in.Value
-	s.mu.Unlock()
+	<-s.chanLock
 	return &pb.SetResponse{Success: true}, nil
 }
 
 func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
-	s.mu.Lock()
+	s.chanLock <- 1
 	value, err := s.store[in.Key]
-	s.mu.Unlock()
+	<-s.chanLock
 	if !err {
 		return &pb.GetResponse{Value: ""}, nil
 	}
@@ -38,9 +37,9 @@ func (s *server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, e
 }
 
 func (s *server) Delete(ctx context.Context, in *pb.DeleteRequest) (*pb.DeleteResponse, error) {
-	s.mu.Lock()
+	s.chanLock <- 1
 	delete(s.store, in.Key)
-	s.mu.Unlock()
+	<-s.chanLock
 	return &pb.DeleteResponse{Success: true}, nil
 }
 
@@ -50,7 +49,7 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	kvServer := &server{store: make(map[string]string)}
+	kvServer := &server{store: make(map[string]string), chanLock: make(chan int, 1)}
 	pb.RegisterKeyValueStoreServer(s, kvServer)
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	log.SetOutput(os.Stdout)
